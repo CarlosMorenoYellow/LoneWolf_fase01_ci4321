@@ -57,7 +57,7 @@ export function createCube(width = 1, height = 1, depth = 1): CubeGeometry {
         // Cara +Z
         0, 1, 3, 0, 3, 2,
         // Cara -Z
-        4, 5, 6, 4, 6, 7,
+        4, 7, 5, 4, 6, 7,
         // Cara +X
         8, 9, 11, 8, 11, 10,
         // Cara -X
