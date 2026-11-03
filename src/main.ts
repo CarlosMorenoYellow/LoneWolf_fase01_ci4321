@@ -12,6 +12,8 @@ import {
   CANVAS_WIDTH,
   CLEAR_COLOR,
   GROUND_COLOR,
+  ACTIVE_COLOR,
+  INACTIVE_COLOR,
   NORMAL_OFFSET_BYTES,
   STRIDE_BYTES,
 } from './constants';
@@ -33,6 +35,19 @@ type TankPart = {
   rotationX?: number;
   rotationY?: number;
   rotationZ?: number;
+};
+
+type ArrowKey =
+  | 'ArrowLeft'
+  | 'ArrowRight'
+  | 'ArrowUp'
+  | 'ArrowDown';
+
+type Projectile = {
+  loaded: boolean;
+  position: [number, number, number];
+  velocity: [number, number, number];
+  radio: number;
 };
 
 // Step 1. Get the WebGL2 context.
@@ -97,7 +112,7 @@ function setupState(gl: WebGL2RenderingContext, canvas: HTMLCanvasElement): void
 // Step 6. Scene: lighting, one directional light, camera.
 function setupScene(ff: FF): void {
   ff.enable(LIGHTING);
-  ff.setGlobalAmbient([0.2, 0.2, 0.2, 1]); // the FF default, set explicitly to make it visible
+  ff.setGlobalAmbient([0.2, 0.2, 0.2, 1]); 
 
   // Directional light aimed toward the tank from the elevated camera side.
   ff.setLight(0, { position: [0.2, 1, 0.8, 0], diffuse: [1, 1, 1, 1] });
@@ -105,7 +120,6 @@ function setupScene(ff: FF): void {
 
   const view = mat4.lookAt(mat4.create(), [0, 7, 13], [0, 2, 0], [0, 1, 0]);
   ff.setViewMatrix(view);
-  // Aspect = width / height of the drawing buffer (4:3). A wrong aspect stretches the cube.
   const projection = mat4.perspective(mat4.create(), Math.PI / 4, CANVAS_WIDTH / CANVAS_HEIGHT, 0.1, 100);
   ff.setProjectionMatrix(projection);
 }
@@ -119,13 +133,145 @@ function setupScene(ff: FF): void {
 // ---------------------------------------------------------------------------
 
 // Game state: everything the simulation needs, nothing about WebGL.
+  const variablesControl = {
+    TankX: 0,
+    elevacionCanon: 0,
+    movimientoTanque: 0,
+    movimientoCanon: 0,
+  };
+
+  let arrowPressed: ArrowKey | null = null;
+  let rPressed: boolean = false;
+  let spacePressed: boolean = false;
+  let power: number = 1;
+  const projectile: Projectile = {
+  loaded: true,
+  position: [0, 0, 0],
+  velocity: [0, 0, 0],
+  radio: 0.15,
+};
+  let color2: readonly [number, number, number, number] = INACTIVE_COLOR
+  let color3: readonly [number, number, number, number] = INACTIVE_COLOR
+
+  function setupInput(): void {
+    window.addEventListener('keydown', (e) => {
+      if (e.code.startsWith('Arrow')) {
+        e.preventDefault();
+        arrowPressed =  e.code as ArrowKey;
+      }
+      if (e.code === 'Space') {
+        e.preventDefault()
+        if(!e.repeat) spacePressed = true;
+      }
+
+      if (e.code === 'KeyR') rPressed = true;
+      if (e.repeat) return;
+
+      switch (e.code) {
+        case 'Digit1':
+        case 'Numpad1':
+          power = 1;
+          break;
+        case 'Digit2':
+        case 'Numpad2':
+          power = 2;
+          break;
+        case 'Digit3':
+        case 'Numpad3':
+          power = 3;
+          break;
+        case 'KeyF':
+          power = power === 3 ? 1 : power + 1;
+          break;
+      }
+    });
+
+    window.addEventListener('keyup', (e) => {
+      if (e.code === arrowPressed) arrowPressed = null;
+    })
+
+    window.addEventListener('blur', () => {arrowPressed = null})
+  }
+
+  function processInput(): void {
+    variablesControl.movimientoTanque =
+      arrowPressed === 'ArrowRight' ? 1 :
+      arrowPressed === 'ArrowLeft' ? -1 : 0;
+    
+    variablesControl.movimientoCanon =
+      arrowPressed === 'ArrowUp' ? 1 :
+      arrowPressed === 'ArrowDown' ? -1 : 0;
+
+    if (power === 1) {color2 = INACTIVE_COLOR; color3 = INACTIVE_COLOR};
+    if (power === 2) {color2 = ACTIVE_COLOR; color3 = INACTIVE_COLOR};
+    if (power === 3) {color2 = ACTIVE_COLOR; color3 = ACTIVE_COLOR};
+
+    if (spacePressed) {
+      if (projectile.loaded) {
+        const angulo = variablesControl.elevacionCanon;
+        const distanciaBoca = 0.77 + projectile.radio;
+        const velocidadInicial = 8 * power;
+
+        projectile.position = [
+          variablesControl.TankX + 0.2,
+          0.9 + Math.sin(angulo) * distanciaBoca,
+          4 - Math.cos(angulo) * distanciaBoca,
+        ];
+
+        projectile.velocity = [
+          0,
+          Math.sin(angulo) * velocidadInicial,
+          -Math.cos(angulo) * velocidadInicial,
+        ];
+
+        projectile.loaded = false;
+      }
+      spacePressed = false;
+    }
+  }
+
+  function update(dt:number): void {
+    const velocidadTanque = 2.5;
+    const velocidadCanon = 0.8;
+    const elevacionMinima = 5 * Math.PI / 180;
+    const elevacionMaxima = 90 * Math.PI / 180;
+
+    variablesControl.TankX +=
+      variablesControl.movimientoTanque * velocidadTanque * dt;
+
+    variablesControl.elevacionCanon +=
+      variablesControl.movimientoCanon * velocidadCanon * dt;
+
+    variablesControl.elevacionCanon = Math.max(
+      elevacionMinima,
+      Math.min(variablesControl.elevacionCanon, elevacionMaxima),
+    );
+
+    if (!projectile.loaded) {
+      projectile.velocity[1] -= 9.8 * dt;
+
+      projectile.position[0] += projectile.velocity[0] * dt;
+      projectile.position[1] += projectile.velocity[1] * dt;
+      projectile.position[2] += projectile.velocity[2] * dt;
+
+      if (projectile.position[1] <= projectile.radio) {
+        projectile.loaded = true;
+      }
+    }
+  }
 
 // Loop phase 3. Draw the current state. render reads the state and never changes it.
 // setMaterial runs every frame, so FF re-uploads the material each frame. That costs a few
 // uniforms and keeps render simple. Exercise: set the material only when colorIndex changes.
 
 
-function render(gl: WebGL2RenderingContext, ff: FF, ground: Mesh , tanque: TankPart[]): void {
+function render(gl: WebGL2RenderingContext, 
+  ff: FF, 
+  ground: Mesh, 
+  tanque: TankPart[], 
+  TankX: number, 
+  Sphere: Mesh, 
+  PosicionSphere: readonly [number, number, number],): void {
   gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
   ff.setMaterial({
     ambient: GROUND_COLOR,
@@ -134,18 +280,19 @@ function render(gl: WebGL2RenderingContext, ff: FF, ground: Mesh , tanque: TankP
 
   const model = mat4.create();
   const normalMatrix = mat3.create();
-
   mat4.identity(model);
+
+  //Render superficie
   ff.setModelMatrix(model);
   ff.setNormalMatrix(mat3.normalFromMat4(normalMatrix, model));
 
   gl.bindVertexArray(ground.vao);
   ff.drawElements(gl.TRIANGLES, ground.indexCount, gl.UNSIGNED_SHORT, 0);
-
+  //Render tanque
   for (const parte of tanque) {
     ff.setMaterial({ambient: parte.color, diffuse: parte.color});
 
-    mat4.fromTranslation(model, [0, 0, 4]);
+    mat4.fromTranslation(model, [TankX, 0, 4]);
     mat4.translate(model, model, parte.position);
     if (parte.rotationX !== undefined) {
       mat4.rotateX(model, model, parte.rotationX);
@@ -164,6 +311,18 @@ function render(gl: WebGL2RenderingContext, ff: FF, ground: Mesh , tanque: TankP
     gl.bindVertexArray(parte.mesh.vao);
     ff.drawElements(gl.TRIANGLES, parte.mesh.indexCount, gl.UNSIGNED_SHORT, 0);
   }
+  //Render bala / esfera
+
+  ff.setMaterial({
+    ambient: [0x1d / 255, 0x41 / 255, 0x70 / 255, 1],
+    diffuse: [0x1d / 255, 0x41 / 255, 0x70 / 255, 1],
+  });
+
+  mat4.fromTranslation(model, PosicionSphere);
+  ff.setModelMatrix(model);
+  ff.setNormalMatrix(mat3.normalFromMat4(normalMatrix, model));
+  gl.bindVertexArray(Sphere.vao);
+  ff.drawElements(gl.TRIANGLES, Sphere.indexCount, gl.UNSIGNED_SHORT, 0);
 
   gl.bindVertexArray(null);
 }
@@ -180,9 +339,16 @@ function run(canvas: HTMLCanvasElement): void {
   const wheels = CreateMesh(gl, createPrism(0.28, 2.2, 4));
   const wheels2 = CreateMesh(gl, createPrism(0.28, 2.2, 32));
   const cannon = CreateMesh(gl, createPrism(0.28, 2.2, 8));
-  const sphere = CreateMesh(gl, createSphere(0.7))
+  const sphere = CreateMesh(gl, createSphere(projectile.radio))
   const piezaTriangular = CreateMesh(gl, createTriangularPrism(0.65, 0.65, 1.8));
   const piezaBordeRueda = CreateMesh(gl, createTriangularPrism(0.65, 0.65, 1.8, true));
+  const cannonParte: TankPart = {
+      mesh: cannon,
+      position: [0.2, 0.9, 0],
+      scale: [0.5, 0.8, 0.5],
+      color: [0x2d /255, 0x30/255, 0x17/255, 1],
+      rotationX: -Math.PI /2,
+    };
   const tanquesito: TankPart[] = [
     //chasis principal
     {
@@ -256,26 +422,59 @@ function run(canvas: HTMLCanvasElement): void {
       scale: [1, 0.5, 1],
       color: [0x54 /255, 0x61/255, 0x14/255, 1],
     },
-    //canon
+    // canon
+    cannonParte,
+    //medidor potencia
     {
-      mesh: cannon,
-      position: [0.2, 0.9, -0.7],
-      scale: [0.5, 0.8, 0.5],
-      color: [0x2d /255, 0x30/255, 0x17/255, 1],
-      rotationX: Math.PI /2,
+      mesh: cube,
+      position: [0.58, 0.55, 0.8],
+      scale: [0.4, 0.5, 0.5],
+      color: color3,
+    },
+    {
+      mesh: cube,
+      position: [0.02, 0.55, 0.8],
+      scale: [0.4, 0.5, 0.5],
+      color: color2,
+    },
+    {
+      mesh: cube,
+      position: [-0.56, 0.55, 0.8],
+      scale: [0.4, 0.5, 0.5],
+      color: ACTIVE_COLOR,
     },
 
   ];
 
-  function frame(): void {
-    render(gl, ff, ground, tanquesito);
+  let previousTime: number | undefined;
+
+  function frame(timestamp: number): void {
+    const dt = previousTime == undefined ? 0 : Math.min((timestamp - previousTime) / 1000, 0.05);
+
+    previousTime = timestamp;
+
+    processInput();
+    tanquesito[11].color = power >= 3 ? ACTIVE_COLOR : INACTIVE_COLOR;
+    tanquesito[12].color = power >= 2 ? ACTIVE_COLOR : INACTIVE_COLOR;
+    update(dt);
+
+    cannonParte.rotationX = -Math.PI / 2 + variablesControl.elevacionCanon;
+    const angulo = variablesControl.elevacionCanon;
+    const distanciaBoca = 0.77 + projectile.radio;
+    const PosicionSphere: [number, number, number] = [
+      variablesControl.TankX +0.2,
+      0.9 + Math.sin(angulo) * distanciaBoca,
+      4 - Math.cos(angulo) * distanciaBoca,
+    ];
+
+    render(gl, ff, ground, tanquesito, variablesControl.TankX, sphere, projectile.loaded ? PosicionSphere : projectile.position);
     requestAnimationFrame(frame);
   }
 
+  setupInput();
   requestAnimationFrame(frame);
 }
 
-// Page scaffolding: create the canvas and start the cube.
 const canvas = document.createElement('canvas');
 document.getElementById('stage')!.append(canvas);
 run(canvas);
