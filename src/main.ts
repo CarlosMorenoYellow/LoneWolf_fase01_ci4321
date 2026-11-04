@@ -50,6 +50,12 @@ type Projectile = {
   radio: number;
 };
 
+type Target = {
+posicion: readonly [number, number, number];
+radio: number;
+activo: boolean;
+};
+
 // Step 1. Get the WebGL2 context.
 function getContext(canvas: HTMLCanvasElement): WebGL2RenderingContext {
   const gl = canvas.getContext('webgl2');
@@ -144,12 +150,18 @@ function setupScene(ff: FF): void {
   let rPressed: boolean = false;
   let spacePressed: boolean = false;
   let power: number = 1;
+
   const projectile: Projectile = {
   loaded: true,
   position: [0, 0, 0],
   velocity: [0, 0, 0],
   radio: 0.15,
-};
+  };
+  const targets: Target[] = [
+  { posicion: [0.2, 1.0, 0], radio: 0.35, activo: true },
+  { posicion: [1.2, 1.4, -2], radio: 0.35, activo: true },
+  { posicion: [-1.8, 0.8, -4], radio: 0.35, activo: true },
+  ];
   let color2: readonly [number, number, number, number] = INACTIVE_COLOR
   let color3: readonly [number, number, number, number] = INACTIVE_COLOR
 
@@ -164,7 +176,7 @@ function setupScene(ff: FF): void {
         if(!e.repeat) spacePressed = true;
       }
 
-      if (e.code === 'KeyR') rPressed = true;
+      if (e.code === 'KeyR' && !e.repeat) rPressed = true;
       if (e.repeat) return;
 
       switch (e.code) {
@@ -191,6 +203,29 @@ function setupScene(ff: FF): void {
     })
 
     window.addEventListener('blur', () => {arrowPressed = null})
+  }
+
+  function resetGame(): void {
+    variablesControl.TankX = 0;
+    variablesControl.elevacionCanon = 5 * Math.PI / 180;
+    variablesControl.movimientoTanque = 0;
+    variablesControl.movimientoCanon = 0;
+
+    arrowPressed = null;
+    rPressed = false;
+    spacePressed = false;
+    power = 1;
+
+    projectile.loaded = true;
+    projectile.position = [0, 0, 0];
+    projectile.velocity = [0, 0, 0];
+
+    for (const target of targets) {
+      target.activo = true;
+    }
+
+    color2 = INACTIVE_COLOR;
+    color3 = INACTIVE_COLOR;
   }
 
   function processInput(): void {
@@ -228,6 +263,11 @@ function setupScene(ff: FF): void {
       }
       spacePressed = false;
     }
+    
+    if (rPressed) {
+      resetGame();
+      return;
+    }
   }
 
   function update(dt:number): void {
@@ -247,14 +287,69 @@ function setupScene(ff: FF): void {
       Math.min(variablesControl.elevacionCanon, elevacionMaxima),
     );
 
-    if (!projectile.loaded) {
+        if (!projectile.loaded) {
+      // Guardamos la posición anterior para comprobar todo el recorrido de este frame.
+      const anterior: [number, number, number] = [...projectile.position];
+
       projectile.velocity[1] -= 9.8 * dt;
 
       projectile.position[0] += projectile.velocity[0] * dt;
       projectile.position[1] += projectile.velocity[1] * dt;
       projectile.position[2] += projectile.velocity[2] * dt;
 
-      if (projectile.position[1] <= projectile.radio) {
+      for (const target of targets) {
+        if (!target.activo) continue;
+
+        // Buscamos el punto del recorrido de la bala más cercano al centro del blanco.
+        const recorrido = [
+          projectile.position[0] - anterior[0],
+          projectile.position[1] - anterior[1],
+          projectile.position[2] - anterior[2],
+        ];
+        const haciaBlanco = [
+          target.posicion[0] - anterior[0],
+          target.posicion[1] - anterior[1],
+          target.posicion[2] - anterior[2],
+        ];
+
+        const largoCuadrado =
+          recorrido[0] * recorrido[0] +
+          recorrido[1] * recorrido[1] +
+          recorrido[2] * recorrido[2];
+
+        const proporcion = largoCuadrado === 0
+          ? 0
+          : Math.max(
+              0,
+              Math.min(
+                1,
+                (haciaBlanco[0] * recorrido[0] +
+                  haciaBlanco[1] * recorrido[1] +
+                  haciaBlanco[2] * recorrido[2]) /
+                  largoCuadrado,
+              ),
+            );
+
+        const puntoCercano = [
+          anterior[0] + recorrido[0] * proporcion,
+          anterior[1] + recorrido[1] * proporcion,
+          anterior[2] + recorrido[2] * proporcion,
+        ];
+
+        const dx = target.posicion[0] - puntoCercano[0];
+        const dy = target.posicion[1] - puntoCercano[1];
+        const dz = target.posicion[2] - puntoCercano[2];
+        const radioColision = projectile.radio + target.radio;
+
+        if (dx * dx + dy * dy + dz * dz <= radioColision * radioColision) {
+          target.activo = false;
+          projectile.loaded = true;
+          break;
+        }
+      }
+
+      // Si no golpeó un blanco, se recarga al tocar el suelo.
+      if (!projectile.loaded && projectile.position[1] <= projectile.radio) {
         projectile.loaded = true;
       }
     }
@@ -271,7 +366,9 @@ function render(gl: WebGL2RenderingContext,
   tanque: TankPart[], 
   TankX: number, 
   Sphere: Mesh, 
-  PosicionSphere: readonly [number, number, number],): void {
+  PosicionSphere: readonly [number, number, number],
+  targets: Target[],
+  ): void {
   gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
   ff.setMaterial({
     ambient: GROUND_COLOR,
@@ -323,6 +420,27 @@ function render(gl: WebGL2RenderingContext,
   ff.setNormalMatrix(mat3.normalFromMat4(normalMatrix, model));
   gl.bindVertexArray(Sphere.vao);
   ff.drawElements(gl.TRIANGLES, Sphere.indexCount, gl.UNSIGNED_SHORT, 0);
+
+  //Render blancos
+
+  ff.setMaterial({
+    ambient: [1, 1, 1, 1],
+    diffuse: [1, 1, 1, 1],
+  });
+
+  for (const target of targets) {
+    if (!target.activo) continue;
+
+    const escala = target.radio / projectile.radio;
+    mat4.fromTranslation(model, target.posicion);
+    mat4.scale(model, model, [escala, escala, escala]);
+
+    ff.setModelMatrix(model);
+    ff.setNormalMatrix(mat3.normalFromMat4(normalMatrix, model));
+
+    gl.bindVertexArray(Sphere.vao);
+    ff.drawElements(gl.TRIANGLES, Sphere.indexCount, gl.UNSIGNED_SHORT, 0);
+  }
 
   gl.bindVertexArray(null);
 }
@@ -467,7 +585,7 @@ function run(canvas: HTMLCanvasElement): void {
       4 - Math.cos(angulo) * distanciaBoca,
     ];
 
-    render(gl, ff, ground, tanquesito, variablesControl.TankX, sphere, projectile.loaded ? PosicionSphere : projectile.position);
+    render(gl, ff, ground, tanquesito, variablesControl.TankX, sphere, projectile.loaded ? PosicionSphere : projectile.position, targets);
     requestAnimationFrame(frame);
   }
 
