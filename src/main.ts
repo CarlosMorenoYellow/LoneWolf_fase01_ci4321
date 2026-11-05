@@ -158,9 +158,9 @@ function setupScene(ff: FF): void {
   radio: 0.15,
   };
   const targets: Target[] = [
-  { posicion: [0.2, 1.0, 0], radio: 0.35, activo: true },
-  { posicion: [1.2, 1.4, -2], radio: 0.35, activo: true },
-  { posicion: [-1.8, 0.8, -4], radio: 0.35, activo: true },
+  { posicion: [1, 1.0, 0], radio: 0.35, activo: true },
+  { posicion: [3, 5, -6], radio: 0.35, activo: true },
+  { posicion: [-2, 7, -10], radio: 0.35, activo: true },
   ];
   let color2: readonly [number, number, number, number] = INACTIVE_COLOR
   let color3: readonly [number, number, number, number] = INACTIVE_COLOR
@@ -275,9 +275,16 @@ function setupScene(ff: FF): void {
     const velocidadCanon = 0.8;
     const elevacionMinima = 5 * Math.PI / 180;
     const elevacionMaxima = 90 * Math.PI / 180;
+    const limiteIzquierdo = -3.5;
+    const limiteDerecho = 3.5;
 
     variablesControl.TankX +=
       variablesControl.movimientoTanque * velocidadTanque * dt;
+    
+    variablesControl.TankX = Math.max(
+      limiteIzquierdo,
+      Math.min(variablesControl.TankX, limiteDerecho),
+    );
 
     variablesControl.elevacionCanon +=
       variablesControl.movimientoCanon * velocidadCanon * dt;
