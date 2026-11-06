@@ -1,62 +1,36 @@
-# Rotating Cube: FixedFunction and a game loop
+# LoneWolf
 
-A yellow cube rotates on the Y axis. One directional light shines on it. The example uses the FixedFunction (FF) module, so no shader code appears in the example. The code shows the game loop that drives the animation.
+## Integrante
 
-## Requirements
+Carlos Moreno
 
-- Node.js 18 or later (tested with Node 24)
-- npm
-- A browser with WebGL2 support
+## Equipo
 
-## Run
+LoneWolf
 
-1. Install the dependencies. This is the only step that needs a network connection.
+## Cómo ejecutar el proyecto
 
-   ```
+1. Instala las dependencias:
+
+   ```bash
    npm install
    ```
 
-2. Start the development server.
+2. Inicia el servidor de desarrollo:
 
-   ```
+   ```bash
    npm run dev
    ```
 
-3. Open `http://localhost:5173` in your browser.
+3. Abre en el navegador la dirección que indique Vite (por defecto, `http://localhost:5173`).
 
-## Use
+## Controles
 
-- Press `Space` to change the cube color. The color cycles yellow → cyan → magenta → yellow.
-- Press `R` to stop or restart the rotation.
-- Holding a key counts as one press. Key auto-repeat is ignored.
-
-## Game loop
-
-Each frame runs three steps in this order:
-
-1. `processInput` handles the `Space` and `R` presses recorded since the last frame.
-2. `update(dt)` changes the rotation angle.
-3. `render` draws the scene.
-
-`dt` is the time since the last frame, in seconds. The value is clamped to 0.1 s. A hidden tab does not make the cube jump when the tab becomes visible again. The rotation speed is in radians per second. The cube turns at the same speed on a 60 Hz display and on a 120 Hz display.
-
-## Other commands
-
-| Command           | Action                                          |
-| ----------------- | ----------------------------------------------- |
-| `npm run build`   | Type-check with `tsc` and build to `dist/`      |
-| `npm run preview` | Serve the built `dist/` folder locally          |
-
-## Project layout
-
-```
-index.html                 page markup
-src/main.ts                WebGL setup, the game loop, and the canvas
-src/constants.ts           geometry, colors, and clear color (#1b1e2b)
-src/vendor/ff/             FF v1.0 (read only; do not edit)
-```
-
-## Troubleshooting
-
-- **Blank page or "WebGL2 is not available."** Enable hardware acceleration in the browser, or try another browser.
-- **Port 5173 is in use.** Stop the other process, or run `npx vite --port 3000`.
+| Tecla | Acción |
+| --- | --- |
+| Flecha izquierda / derecha | Mover el tanque |
+| Flecha arriba / abajo | Elevar / bajar el cañón |
+| Espacio | Disparar |
+| `1`, `2`, `3` | Seleccionar nivel de potencia |
+| `F` | Cambiar al siguiente nivel de potencia |
+| `R` | Reiniciar la partida |
